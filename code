@@ -1,0 +1,76 @@
+const byte LED_PIN_NUMBER = 13;
+const byte POTENTIOMETER_PIN_NUMBER = A4;
+volatile double frequencyValue = 2.0; // Default frequency in Hz
+
+void setup()
+{
+  pinMode(LED_PIN_NUMBER, OUTPUT);
+  pinMode(POTENTIOMETER_PIN_NUMBER, INPUT);
+  
+  Serial.begin(9600);
+  
+  initializeTimer(frequencyValue); // Initialize Timer1 with the default frequency
+}
+
+void loop()
+{ 
+  
+}
+
+void initializeTimer(double freqValue){
+  noInterrupts();
+  
+  // Determine prescaler and counts based on the desired frequency
+  double freqMicro = 1000000.0 / freqValue; // Frequency in microseconds
+  double prescalerOptions[] = {1, 8, 64, 256, 1024};
+  double prescalerValue = 0;
+  double countsValue = 0;
+  
+  // Find suitable prescaler and counts for Timer1
+  for(int i=0; i<5; i++){
+    countsValue = freqMicro / prescalerOptions[i];
+    if(countsValue <= 65536){
+      prescalerValue = prescalerOptions[i];
+      break;
+    }
+  }
+
+  // Configure Timer1 registers
+  TCCR1A = 0;
+  TCCR1B = 0;
+  TCNT1 = 0;
+
+  // Set prescaler based on calculated value
+  if(prescalerValue == 1){
+    TCCR1B |= (1 << CS10);
+  }
+  else if(prescalerValue == 8){
+    TCCR1B |= (1 << CS11);
+  }
+  else if(prescalerValue == 64){
+    TCCR1B |= (1 << CS11) | (1 << CS10);
+  }
+  else if(prescalerValue == 256){
+    TCCR1B |= (1 << CS12);
+  }
+  else if(prescalerValue == 1024){
+    TCCR1B |= (1 << CS12) | (1 << CS10);
+  }
+
+  // Calculate and set OCR1A value
+  OCR1A = round(countsValue) - 1;
+  
+  // Enable compare match interrupt
+  TIMSK1 |= (1 << OCIE1A);
+
+  interrupts();
+}
+
+ISR(TIMER1_COMPA_vect){
+   digitalWrite(LED_PIN_NUMBER, digitalRead(LED_PIN_NUMBER) ^ 1); // Toggle LED state
+  
+   // Read potentiometer value and update timer frequency
+   int potValue = analogRead(POTENTIOMETER_PIN_NUMBER);
+   double mappedValue = map(potValue, 0, 1023, 1, 10); // Map potentiometer value to frequency range (1-10 Hz)
+   frequencyValue = mappedValue;
+}
